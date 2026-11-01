@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>{{TITLE}}</title>
+<meta name="description" content="{{DESC}}">
+<link rel="canonical" href="{{CANON}}">
+<meta property="og:url" content="{{CANON}}">
+<meta property="og:description" content="{{DESC}}">
+<meta property="og:title" content="{{TITLE}}">
+<meta property="og:type" content="website">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&family=Instrument+Serif&family=Syne:wght@700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"Organization","name":"NDITC","alternateName":"Notre Dame Information Technology Club","foundingDate":"2018","email":"nditc.official@gmail.com","address":"Toyenbee Circular Rd, Dhaka 1000"}</script>
+<link rel="stylesheet" href="/static/site.css">
+<noscript><style>#ld,#core,#tb{display:none}</style></noscript>
+</head>
+<body data-w="home">
+<canvas id="bg"></canvas>
+<div id="ld"><div><pre id="lt"></pre><i id="lb"></i></div></div>
+<button id="core" aria-label="Open world map">NDITC — Index</button>
+<button id="tb" aria-label="Open terminal">&gt;_ Terminal</button>
+<nav id="wr" aria-label="World map"><div class="ct">INDEX — ESC TO CLOSE</div></nav>
+<div id="tm" role="dialog" aria-label="Terminal"><div id="to"></div><label>nditc@lab:~$<input id="ti" autocomplete="off" spellcheck="false" aria-label="command"></label></div>
+<main id="view">{{SSR}}</main>
+
+<!-- ALL CONTENT LIVES HERE. Edit text freely. Put images as "img":"data:image/..." (published pages block remote images). -->
+<script type="application/json" id="c">{{CONTENT}}</script>
+
+<script src="/static/site.js" defer></script>
+</body>
+</html>

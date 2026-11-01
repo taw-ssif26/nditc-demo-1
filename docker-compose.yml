@@ -1,0 +1,30 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: always
+    environment: {POSTGRES_DB: nditc, POSTGRES_USER: nditc, POSTGRES_PASSWORD: "${DB_PASSWORD:?run scripts/make-env.sh}"}
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck: {test: ["CMD-SHELL", "pg_isready -U nditc"], interval: 5s, retries: 10}
+  redis:
+    image: redis:7-alpine
+    restart: always
+  api:
+    build: ./backend
+    restart: always
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://nditc:${DB_PASSWORD:?run scripts/make-env.sh}@db:5432/nditc
+      REDIS_URL: redis://redis:6379/0
+      DATA_DIR: /data
+      ENV: prod
+    volumes: [uploads:/data]
+    depends_on: {db: {condition: service_healthy}, redis: {condition: service_started}}
+    healthcheck: {test: ["CMD", "python", "-c", "import urllib.request as u;u.urlopen('http://127.0.0.1:8000/healthz')"], interval: 15s, retries: 5, start_period: 30s}
+  caddy:
+    image: caddy:2-alpine
+    restart: always
+    ports: ["80:80", "443:443"]
+    environment: {DOMAIN: "${DOMAIN:?run scripts/make-env.sh}"}
+    volumes: [./Caddyfile:/etc/caddy/Caddyfile, caddy:/data]
+    depends_on: [api]
+volumes: {pgdata: {}, uploads: {}, caddy: {}}

@@ -1,0 +1,30 @@
+# Render Blueprint: free web service. Database + file storage live on Supabase (see DEPLOY-FREE.md).
+services:
+  - type: web
+    name: nditc
+    runtime: docker
+    plan: free
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    healthCheckPath: /ping
+    autoDeploy: true
+    envVars:
+      - { key: ENV, value: prod }
+      - { key: REQUIRE_2FA, value: "1" }
+      - { key: WEB_CONCURRENCY, value: "2" }
+      - { key: DB_POOL, value: "3" }
+      - { key: ARGON_MEM_KB, value: "19456" }
+      - { key: ARGON_TIME, value: "2" }
+      - { key: ARGON_PAR, value: "1" }
+      - { key: FORWARDED_ALLOW_IPS, value: "*" }
+      - { key: TRUST_CF, value: "0" }      # set to 1 only after you put Cloudflare in front
+      - { key: S3_BUCKET, value: nditc }
+      - { key: SECRET_KEY, generateValue: true }
+      - { key: DATABASE_URL, sync: false }
+      - { key: S3_ENDPOINT, sync: false }
+      - { key: S3_REGION, sync: false }
+      - { key: S3_ACCESS_KEY, sync: false }
+      - { key: S3_SECRET_KEY, sync: false }
+      - { key: BASE_URL, sync: false }
+      - { key: SUPERADMIN_EMAIL, sync: false }
+      - { key: SUPERADMIN_PASSWORD, sync: false }
