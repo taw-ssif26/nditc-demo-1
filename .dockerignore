@@ -1,0 +1,7 @@
+.git
+frontend-tests
+backups
+**/__pycache__
+**/*.db
+**/data
+.env

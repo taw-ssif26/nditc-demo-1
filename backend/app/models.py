@@ -3,8 +3,11 @@ from sqlalchemy import create_engine, String, Text, DateTime, ForeignKey, Table,
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, sessionmaker
 
 URL = os.environ.get("DATABASE_URL", "sqlite:///./dev.db")
+for _p in ("postgres://", "postgresql://"):  # accept the string exactly as Neon/Supabase show it
+    if URL.startswith(_p): URL = "postgresql+psycopg://" + URL[len(_p):]
 POOL = int(os.environ.get("DB_POOL", "10"))  # keep small on free hosts: their databases allow few connections
-kw = {} if URL.startswith("sqlite") else dict(pool_size=POOL, max_overflow=POOL, pool_pre_ping=True)
+# pool_recycle: drop connections before a serverless database suspends them; prepare_threshold=None: safe behind pgbouncer-style poolers (Neon, Supabase)
+kw = {} if URL.startswith("sqlite") else dict(pool_size=POOL, max_overflow=POOL, pool_pre_ping=True, pool_recycle=240, connect_args={"prepare_threshold": None})
 engine = create_engine(URL, **kw)
 SessionLocal = sessionmaker(engine, expire_on_commit=False)
 now = lambda: dt.datetime.now(dt.timezone.utc)

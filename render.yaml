@@ -4,8 +4,8 @@ services:
     name: nditc
     runtime: docker
     plan: free
-    dockerfilePath: ./backend/Dockerfile
-    dockerContext: ./backend
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
     healthCheckPath: /ping
     autoDeploy: true
     envVars:
@@ -18,7 +18,8 @@ services:
       - { key: ARGON_PAR, value: "1" }
       - { key: FORWARDED_ALLOW_IPS, value: "*" }
       - { key: TRUST_CF, value: "0" }      # set to 1 only after you put Cloudflare in front
-      - { key: S3_BUCKET, value: nditc }
+      - { key: PAGE_CACHE_TTL, value: "300" }
+      - { key: S3_BUCKET, sync: false }
       - { key: SECRET_KEY, generateValue: true }
       - { key: DATABASE_URL, sync: false }
       - { key: S3_ENDPOINT, sync: false }

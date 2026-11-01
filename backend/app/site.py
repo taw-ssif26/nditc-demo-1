@@ -6,6 +6,7 @@ from .models import Entry
 BASE = os.environ.get("BASE_URL", "http://localhost:8000").rstrip("/")
 TPL = (pathlib.Path(__file__).parent / "static" / "site.html").read_text()
 CACHE: dict = {}
+TTL = int(os.environ.get("PAGE_CACHE_TTL", "30"))  # seconds; raise on free serverless databases so public pages rarely wake them
 esc = lambda x: html.escape(str(x))
 SEO = {
     "/": ("NDITC — Notre Dame Information Technology Club", "Notre Dame Information Technology Club (NDITC), est. 2018: AI, robotics, web and app development, competitive programming and design."),
@@ -74,7 +75,7 @@ def body(path, C):
 
 def page(path, s):
     hit = CACHE.get(path)
-    if hit and time.time() - hit[0] < 30: return hit[1]
+    if hit and time.time() - hit[0] < TTL: return hit[1]
     C = content(s); title, desc = SEO[path]
     v = {"TITLE": esc(title), "DESC": esc(desc), "CANON": esc(BASE + path), "SSR": body(path, C), "CONTENT": json.dumps(C, ensure_ascii=False).replace("<", "\\u003c")}
     out = re.sub(r"\{\{(\w+)\}\}", lambda m: v.get(m[1], ""), TPL)  # one pass: admin text can never inject a placeholder
