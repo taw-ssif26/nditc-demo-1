@@ -104,7 +104,7 @@ footer{margin-top:120px;border-top:1px solid var(--bd);padding-top:22px;color:va
 #tb{position:fixed;
     z-index:40;
     bottom:calc(14px + env(safe-area-inset-bottom,0px));
-    right:50px;
+    right:200px;
     padding:12px 18px;
     border-radius:99px;
     border:1px solid #39ff88;
