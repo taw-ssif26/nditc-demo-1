@@ -30,7 +30,13 @@ def content(s):
     g = lambda k: by.get(k, [])
     pg = {e.title: e.body for e in g("page")}
     fd = lambda e: e.date.strftime("%d %b %Y") if e.date else ""
-    item = lambda e: {"t": e.title, "d": e.body, "img": e.image, "link": e.link, "date": fd(e)}
+    UTC = dt.timezone.utc
+    aw = lambda d: d.replace(tzinfo=UTC) if d is not None and d.tzinfo is None else d
+    def upcoming(e):
+        end = e.end_date or (aw(e.date) + dt.timedelta(hours=24) if e.date else None)
+        return end is None or aw(end) >= dt.datetime.now(UTC)
+    item = lambda e: {"id": e.id, "t": e.title, "d": e.body, "img": e.image, "link": e.link, "date": fd(e), "iso": aw(e.date).isoformat() if e.date else "",
+                      "end": aw(e.end_date).isoformat() if e.end_date else "", "loc": e.location, "reg": bool(e.reg_open), "up": upcoming(e) if e.kind == "event" else False}
     def stat(e):
         m = re.match(r"\s*(\d+)(.*)", e.body)
         return [e.title, int(m[1]), m[2].strip()] if m else [e.title, 0, e.body]
@@ -44,7 +50,7 @@ def content(s):
             "motto": pg.get("motto", ""), "history": pg.get("history", ""), "objectives": pg.get("objectives", ""),
             "stats": [stat(e) for e in g("stat")],
             "timeline": [[fd(e), "" if e.title == "(entry pending)" else e.title] for e in g("timeline")],
-            "events": [item(e) for e in g("event")], "executives": [item(e) for e in g("executive")],
+            "events": sorted([item(e) for e in g("event")], key=lambda i: (not i["up"], i["iso"] if i["up"] else "", "" if i["up"] else "".join(chr(255 - ord(c)) for c in i["iso"]))), "executives": [item(e) for e in g("executive")],
             "blog": [item(e) for e in g("blog")], "publications": [item(e) for e in g("publication")], "pg": pg}
 
 
@@ -60,7 +66,7 @@ def body(path, C):
          + sec(C["news"]["t"], pr(C["news"]["d"])) + sec("Official NDITC Mobile Application", pr(C["app"])),
          "/about": lambda: f"<h1>About NDITC</h1>{pr(C['motto'], C['history'], C['objectives'])}" + sec("In numbers", ul([(f"{a[1]}{a[2]}", a[0]) for a in C["stats"]]))
          + sec("Timeline of achievements", ul([(a[0], a[1]) for a in C["timeline"]])),
-         "/activities": lambda: "<h1>Activities</h1>" + sec("Our activities include", A("activities")) + sec("Events", A("events")),
+         "/activities": lambda: "<h1>Activities</h1>" + sec("Our activities include", A("activities")) + sec("Events", ul([(f"{a['t']} ({a['date']}{', ' + a['loc'] if a['loc'] else ''})", a["d"]) for a in C["events"]])),
          "/projects": lambda: "<h1>Projects</h1>" + sec("Featured", A("projects")),
          "/executives": lambda: "<h1>Executives</h1>" + sec("The team", A("executives")),
          "/publication": lambda: "<h1>Publication</h1>" + sec("RECURSION", pr(C["activities"][3]["d"] if len(C["activities"]) > 3 else "") + A("publications")),
@@ -77,7 +83,11 @@ def page(path, s):
     hit = CACHE.get(path)
     if hit and time.time() - hit[0] < TTL: return hit[1]
     C = content(s); title, desc = SEO[path]
-    v = {"TITLE": esc(title), "DESC": esc(desc), "CANON": esc(BASE + path), "SSR": body(path, C), "CONTENT": json.dumps(C, ensure_ascii=False).replace("<", "\\u003c")}
+    ev = [{"@type": "Event", "name": e["t"], "startDate": e["iso"], **({"endDate": e["end"]} if e["end"] else {}), "description": e["d"][:300], "eventStatus": "https://schema.org/EventScheduled",
+           "eventAttendanceMode": "https://schema.org/OfflineEventAttendanceMode", "location": {"@type": "Place", "name": e["loc"] or "Notre Dame College, Dhaka", "address": e["loc"] or "Toyenbee Circular Rd, Dhaka 1000"},
+           "organizer": {"@type": "Organization", "name": "NDITC", "url": BASE}} for e in C["events"] if e["iso"]]
+    ld = '<script type="application/ld+json">' + json.dumps([{"@context": "https://schema.org", **x} for x in ev], ensure_ascii=False).replace("<", "\\u003c") + "</script>" if ev and path in ("/", "/activities") else ""
+    v = {"LD": ld, "TITLE": esc(title), "DESC": esc(desc), "CANON": esc(BASE + path), "SSR": body(path, C), "CONTENT": json.dumps(C, ensure_ascii=False).replace("<", "\\u003c")}
     out = re.sub(r"\{\{(\w+)\}\}", lambda m: v.get(m[1], ""), TPL)  # one pass: admin text can never inject a placeholder
     CACHE[path] = (time.time(), out)
     return out
