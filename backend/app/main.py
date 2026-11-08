@@ -5,7 +5,7 @@ from fastapi.responses import FileResponse, JSONResponse, HTMLResponse
 from starlette.exceptions import HTTPException as SHTTP
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
@@ -223,6 +223,21 @@ class EntryIn(BaseModel):
     audience: str = Field("public", pattern="^(public|students|assigned)$")
     published: bool = True
     position: int = Field(0, ge=-9999, le=9999)
+    location: str = Field("", max_length=200)
+    end_date: dt.datetime | None = None
+    capacity: int | None = Field(None, ge=1, le=100000)
+    reg_open: bool = False
+    reg_deadline: dt.datetime | None = None
+    form_id: int | None = None
+
+    @model_validator(mode="after")
+    def _event_fields(self):
+        for k in ("date", "end_date", "reg_deadline"):
+            v = getattr(self, k)
+            if v is not None: setattr(self, k, v.astimezone(UTC) if v.tzinfo else v.replace(tzinfo=UTC))  # always store UTC
+        if self.kind != "event": self.location, self.end_date, self.capacity, self.reg_open, self.reg_deadline, self.form_id = "", None, None, False, None, None
+        if self.end_date and self.date and self.end_date < self.date: raise ValueError("The event can't end before it starts")
+        return self
 
     @field_validator("kind")
     def _k(cls, v):
@@ -243,6 +258,8 @@ class EntryIn(BaseModel):
 def ser(e: Entry, admin=False):
     d = dict(id=e.id, kind=e.kind, title=e.title, body=e.body, image=e.image, link=e.link, audience=e.audience,
              date=e.date.isoformat() if e.date else None, published=e.published, position=e.position,
+             location=e.location, end_date=e.end_date.isoformat() if e.end_date else None, capacity=e.capacity, reg_open=e.reg_open,
+             reg_deadline=e.reg_deadline.isoformat() if e.reg_deadline else None, form_id=e.form_id,
              files=[dict(id=f.id, name=f.name, mime=f.mime, size=f.size) for f in e.files])
     if admin: d["user_ids"] = [x.id for x in e.users]
     return d
@@ -270,7 +287,12 @@ def a_list(kind: str, q: str = "", limit: int = Query(50, ge=1, le=200), offset:
     w = [Entry.kind == kind] + ([func.lower(Entry.title).contains(q.lower(), autoescape=True)] if q else [])
     total = s.scalar(select(func.count()).select_from(Entry).where(*w))
     rows = s.scalars(select(Entry).where(*w).order_by(Entry.position, Entry.id).limit(limit).offset(offset))
-    return {"items": [ser(e, True) for e in rows], "total": total}
+    items = [ser(e, True) for e in rows]
+    if kind == "event" and items:  # registration counts for the events table
+        from .models import Registration
+        c = dict(s.execute(select(Registration.event_id, func.count()).where(Registration.event_id.in_([i["id"] for i in items]), Registration.status == "registered").group_by(Registration.event_id)).all())
+        for i in items: i["regs"] = c.get(i["id"], 0)
+    return {"items": items, "total": total}
 
 
 @app.post("/api/admin/entries")
@@ -513,4 +535,6 @@ async def http_exc(request, exc):
     return JSONResponse({"detail": exc.detail}, exc.status_code, headers=getattr(exc, "headers", None))
 
 
+from .features import router as features_router  # noqa: E402  (needs the helpers defined above)
+app.include_router(features_router)
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
