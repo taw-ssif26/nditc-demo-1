@@ -101,7 +101,18 @@ footer{margin-top:120px;border-top:1px solid var(--bd);padding-top:22px;color:va
 @keyframes ping{to{transform:scale(1.7);opacity:0}}
 #core:hover .sph{transform:scale(1.15) rotate(20deg)}
 #core span{padding:6px 12px;border-radius:99px;background:rgba(5,3,15,.65);backdrop-filter:blur(6px);text-shadow:0 0 14px rgba(var(--g),.9);max-width:46vw;transition:opacity .3s;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-#tb{position:fixed;z-index:40;bottom:calc(14px + env(safe-area-inset-bottom,0px));right:14px;padding:12px 18px;border-radius:99px;border:1px solid #39ff88;background:rgba(2,12,6,.8);color:#39ff88;font:700 .72rem var(--fm);letter-spacing:.12em;text-transform:uppercase;box-shadow:0 0 22px -4px #39ff88}
+#tb{position:fixed;
+    z-index:40;
+    bottom:calc(14px + env(safe-area-inset-bottom,0px));
+    right:50px;
+    padding:12px 18px;
+    border-radius:99px;
+    border:1px solid #39ff88;
+    background:rgba(2,12,6,.8);
+    color:#39ff88;font:700 .72rem var(--fm);
+    letter-spacing:.12em;
+    text-transform:uppercase;
+    box-shadow:0 0 22px -4px #39ff88}
 #tb:hover{background:#39ff88;color:#021208}
 #wr{position:fixed;inset:0;z-index:35;display:none;overflow:hidden;background-color:#02010a;background:radial-gradient(circle at 50% 50%,rgba(var(--g),.16),#02010a 68%);background-image:radial-gradient(1.5px 1.5px at 22px 38px,#fff,transparent),radial-gradient(1px 1px at 120px 90px,#cfe,transparent),radial-gradient(1.5px 1.5px at 190px 170px,#fcf,transparent),radial-gradient(circle at 50% 50%,rgba(var(--g),.16),#02010a 68%);background-size:230px 230px,230px 230px,230px 230px,100% 100%;background-color:#02010a}
 #wr.on{display:block;animation:warp .7s cubic-bezier(.2,.8,.2,1)}
