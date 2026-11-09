@@ -34,17 +34,8 @@ IMG = {".jpg", ".jpeg", ".png", ".webp"}
 MAX = 20 * 1024 * 1024
 STATIC = pathlib.Path(__file__).parent / "static"
 # Public pages load Google Fonts; swap for self-hosted fonts to drop these two hosts.
-CSP = (
-    "default-src 'self'; "
-    "img-src 'self' data:; "
-    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
-    "font-src https://fonts.gstatic.com; "
-    "script-src 'self' https://chatbotforweb.onrender.com; "
-    "connect-src 'self' https://chatbotforweb.onrender.com; "
-    "frame-ancestors 'none'; "
-    "base-uri 'none'; "
-    "form-action 'self'"
-)
+CSP = "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
+
 TRUST_CF = os.environ.get("TRUST_CF", "1") == "1"  # set 0 when NOT behind Cloudflare, so clients can't fake their IP
 
 

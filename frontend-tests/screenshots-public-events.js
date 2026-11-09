@@ -1,0 +1,20 @@
+const puppeteer = require('puppeteer-core'); const chromium = require('@sparticuz/chromium'); const C = chromium.default || chromium;
+const sleep = ms => new Promise(r => setTimeout(r, ms)); const B = 'http://127.0.0.1:8000'; const H = { 'Content-Type': 'application/json', 'X-Requested-With': 'nditc' };
+(async () => {
+  const jar = {}; const call = async (m, p, b) => { const r = await fetch(B + '/api' + p, { method: m, headers: { ...H, cookie: jar.c || '' }, body: b ? JSON.stringify(b) : undefined }); const sc = r.headers.getSetCookie(); if (sc.length) jar.c = sc.map(x => x.split(';')[0]).join('; '); return r.json(); };
+  await call('POST', '/auth/login', { email: 'boss@x.org', password: 'supersecret-123' });
+  const f = await call('POST', '/admin/forms', { title: 'Contest details', kind: 'form', published: true, description: 'Tell us about your team.', questions: [{ type: 'short', text: 'Team name', required: true }, { type: 'single', text: 'How many members?', options: ['1', '2', '3', '4'] }] });
+  const d = (n) => new Date(Date.now() + n * 864e5).toISOString();
+  await call('POST', '/admin/entries', { kind: 'event', title: 'National Programming Contest 2026', body: 'Open to school and college students across the country.', date: d(12), location: 'Notre Dame College, Dhaka', capacity: 120, reg_open: true, audience: 'public', form_id: f.id });
+  await call('POST', '/admin/entries', { kind: 'event', title: 'Members-only Python Workshop', body: 'Students only.', date: d(6), reg_open: true, audience: 'students' });
+  const ex = await C.executablePath(); const b = await puppeteer.launch({ args: [...C.args, '--no-sandbox'], executablePath: ex, headless: 'shell' });
+  const p = await b.newPage(); await p.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true }); p.on('pageerror', e => console.log('PAGEERROR', e.message.slice(0, 100)));
+  await p.goto(B + '/activities', { waitUntil: 'domcontentloaded' }); await sleep(3000);
+  await p.evaluate(() => { document.querySelectorAll('.rv').forEach(e => e.classList.add('in')); document.querySelector('.evc').scrollIntoView(); }); await sleep(600);
+  await p.screenshot({ path: '/tmp/shots/pub_events.png' });
+  console.log('public page lists students-only event:', await p.evaluate(() => /Members-only/.test(document.body.textContent)));
+  await p.evaluate(() => document.querySelector('[data-reg]').click()); await sleep(1500);
+  await p.screenshot({ path: '/tmp/shots/pub_dialog.png' });
+  console.log(JSON.stringify(await p.evaluate(() => ({ sw: document.documentElement.scrollWidth, iw: innerWidth }))));
+  await b.close();
+})().catch(e => { console.log('CRASH', e.message); process.exit(1); });

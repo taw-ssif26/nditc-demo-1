@@ -7,7 +7,8 @@ const P = r => r === 'home' ? '/' : r === 'app' ? '/mobile-app' : '/' + r;
 const route = () => { const p = location.pathname.replace(/\/+$/, '') || '/'; return R.find(r => P(r) === p) || 'home'; };
 const nav = r => { if (P(r) !== location.pathname) { history.pushState({}, '', P(r)); go(); } };
 const E = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-const RM = matchMedia('(prefers-reduced-motion:reduce)').matches, safe = u => /^https?:\/\//.test(u || '');
+let RM = document.documentElement.dataset.fx === 'off';  // calm mode: no animation, no particles, no glow
+const safe = u => /^https?:\/\//.test(u || '');
 document.addEventListener('click', e => { const a = e.target.closest('a[href^="/"]'); if (!a || a.target || e.metaKey || e.ctrlKey || e.shiftKey) return; const r = R.find(x => P(x) === a.getAttribute('href')); if (r) { e.preventDefault(); $('#wr').classList.remove('on'); document.body.classList.remove('mapopen'); nav(r); } });
 
 /* ---------- views ---------- */
@@ -28,7 +29,7 @@ const evSecs = () => (evUp().length ? sec('Upcoming events', evUp().map(evc).joi
 const reactor = (t, d, href) => `<div class="reactor rv"><div><p class="bp">${E(t)}</p><p>${E(d)}</p><a class="bt" href="${href}">${E(C.cta)}</a></div><div class="rx" aria-hidden="true"><i style="--k:1"></i><i style="--k:2"></i><i style="--k:3"></i><i style="--k:4"></i><b></b></div></div>`;
 const V = {
   home: () => hd('NDITC', E(C.badge), `<p class="lead" data-ty="${E(C.lead)}"></p><div class="cta"><a class="bt alt" href="/about">${E(C.cta)}</a><a class="bt" href="/portal#register">Join as a student</a></div>`)
-    + `<div class="mq" aria-hidden="true"><div>${[...C.departments, ...C.departments].map(d => `<span>${E(d)}</span>`).join('')}</div></div>`
+    + `<div class="mq" aria-hidden="true"><div>${[...C.departments, ...C.departments].map((d, i) => `<span${i >= C.departments.length ? ' class="d"' : ''}>${E(d)}</span>`).join('')}</div></div>`
     + sec('Departments', C.departments.map((d, i) => gc(d, '', z(i))).join(''), 'bento')
     + sec('Featured project', reactor(C.project.name, C.project.desc, '/projects'))
     + sec('Our activities include', acts(), 'rail')
@@ -103,7 +104,7 @@ function seed() {
   const rain = mode === 'rain', n = rain ? Math.ceil(W / 18) : Math.round(Math.min(120, W * H / 9000));
   P2 = Array.from({ length: n }, (_, i) => ({ x: rain ? i * 18 : Math.random() * W, y: Math.random() * H, vx: (Math.random() - .5) * .5, vy: (Math.random() - .5) * .5, r: Math.random() * 2 + .8, c: Math.floor(Math.random() * 3), a: Math.random() * 6.28, s: Math.random() }));
 }
-function rs() { W = innerWidth; H = innerHeight; DPR = Math.min(devicePixelRatio || 1, matchMedia('(pointer:coarse)').matches ? 1.25 : 2); cv.width = W * DPR; cv.height = H * DPR; x.setTransform(DPR, 0, 0, DPR, 0, 0); seed(); if (RM) frame(0); }
+function rs() { W = innerWidth; H = innerHeight; DPR = Math.min(devicePixelRatio || 1, matchMedia('(pointer:coarse)').matches ? 1.25 : 2); cv.width = W * DPR; cv.height = H * DPR; x.setTransform(DPR, 0, 0, DPR, 0, 0); seed();  }
 const DRAW = {
   net() { for (const p of P2) { p.x += p.vx; p.y += p.vy; if (p.x < 0 || p.x > W) p.vx *= -1; if (p.y < 0 || p.y > H) p.vy *= -1; const dx = p.x - mx, dy = p.y - my, d = Math.hypot(dx, dy); if (d < 150 && d > 0) { p.x += dx / d * 1.4; p.y += dy / d * 1.4; } dot(p, p.r * 1.7, p.c, .95); }
     x.lineWidth = 1; for (let i = 0; i < P2.length; i++) for (let j = i + 1; j < P2.length; j++) { const a = P2[i], b = P2[j], d = Math.hypot(a.x - b.x, a.y - b.y); if (d < 125) { x.globalAlpha = (1 - d / 125) * .55; x.strokeStyle = cols[a.c]; x.beginPath(); x.moveTo(a.x, a.y); x.lineTo(b.x, b.y); x.stroke(); } } },
@@ -143,7 +144,7 @@ function go() {
     $('#view').innerHTML = V[r](); scrollTo(0, 0);
     document.title = (r === 'home' ? '' : N[r] + ' — ') + 'NDITC — Notre Dame Information Technology Club';
     const cs = getComputedStyle(document.body); cols = ['--ac', '--ac2', '--ac3'].map(k => { const v = cs.getPropertyValue(k).trim(); return /^#[0-9a-f]{6}$/i.test(v) ? v : '#22e5ff'; });
-    mode = MODE[r]; RP = []; seed(); if (RM) frame(0);
+    mode = MODE[r]; RP = []; seed(); 
     hydrate(); fit(); ld.classList.add('off'); busy = 0;
   }, RM ? 60 : 950);
 }
@@ -155,11 +156,11 @@ addEventListener('resize', fit);
 function hydrate() {
   const io = new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); e.target.querySelectorAll('.num').forEach(cnt); } }), { threshold: .12 });
   document.querySelectorAll('.rv').forEach(e => io.observe(e));
-  const t = $('[data-ty]'); if (t) { const s = t.dataset.ty; let i = 0; const k = () => { t.textContent = s.slice(0, i++); if (i <= s.length) setTimeout(k, RM ? 0 : 16); }; k(); }
-  if (matchMedia('(hover:hover)').matches && !RM) document.querySelectorAll('.gc').forEach(c => { c.onpointermove = e => { const b = c.getBoundingClientRect(); c.style.transform = `perspective(800px) rotateY(${((e.clientX - b.left) / b.width - .5) * 9}deg) rotateX(${-((e.clientY - b.top) / b.height - .5) * 9}deg) translateY(-6px)`; }; c.onpointerleave = () => c.style.transform = ''; });
+  const t = $('[data-ty]'); if (t) { const s = t.dataset.ty; let i = 0; const k = () => { t.textContent = s.slice(0, i++); if (i <= s.length) setTimeout(k, 16); }; RM ? (t.textContent = s) : k(); }
+  if (matchMedia('(hover:hover)').matches) document.querySelectorAll('.gc').forEach(c => { c.onpointermove = e => { if (RM) return; const b = c.getBoundingClientRect(); c.style.transform = `perspective(800px) rotateY(${((e.clientX - b.left) / b.width - .5) * 9}deg) rotateX(${-((e.clientY - b.top) / b.height - .5) * 9}deg) translateY(-6px)`; }; c.onpointerleave = () => c.style.transform = ''; });
   const sb = $('#sub'); if (sb) sb.onclick = () => { const v = $('#em').value.trim(); $('#sm').textContent = /^\S+@\S+\.\S+$/.test(v) ? 'Queued. (Demo: connect the API to store it.)' : 'Invalid address.'; };
 }
-function cnt(n) { const to = +n.dataset.n, s = n.dataset.s || ''; let v = 0; const st = () => { v += Math.ceil(to / 40); if (v >= to) v = to; n.textContent = v + s; if (v < to && !RM) requestAnimationFrame(st); }; st(); }
+function cnt(n) { const to = +n.dataset.n, s = n.dataset.s || ''; let v = RM ? to : 0; const st = () => { v += Math.ceil(to / 40); if (v >= to) v = to; n.textContent = v + s; if (v < to && !RM) requestAnimationFrame(st); }; st(); }
 addEventListener('popstate', go);
 
 /* ---------- navigation: the orb opens a galaxy of worlds ---------- */
@@ -201,5 +202,10 @@ ti.addEventListener('keydown', e => { if (e.key === 'Enter') { const v = ti.valu
 const tg = () => { tm.classList.toggle('on'); if (tm.classList.contains('on')) { if (!to.textContent) out('NDITC lab terminal v1.0, type "help"'); ti.focus(); } };
 $('#tb').onclick = tg;
 addEventListener('keydown', e => { if (e.key === 'Escape') { openMap(false); tm.classList.remove('on'); } else if (e.key === '`' && document.activeElement !== ti) { e.preventDefault(); tg(); } else if ((e.key === 'm' || e.key === 'M') && document.activeElement !== ti && !e.metaKey && !e.ctrlKey) openMap(!wr.classList.contains('on')); });
+/* ---------- effects switch: lights + animation on/off, remembered per visitor ---------- */
+const fxb = document.createElement('button'); fxb.id = 'fx'; fxb.type = 'button'; document.body.append(fxb);
+function paintFx() { const on = !RM; fxb.setAttribute('aria-pressed', String(on)); fxb.setAttribute('aria-label', on ? 'Visual effects are on. Turn them off for a calm, still version of the site' : 'Visual effects are off. Turn lights and animations on'); fxb.title = on ? 'Turn lights & animations off' : 'Turn lights & animations on'; fxb.innerHTML = `<i></i><span>${on ? 'Effects on' : 'Effects off'}</span>`; }
+fxb.onclick = () => { const next = RM ? 'on' : 'off'; document.documentElement.dataset.fx = next; try { localStorage.setItem('nditc_fx', next); } catch (e) {} RM = next === 'off'; cancelAnimationFrame(raf); if (RM) x.clearRect(0, 0, W, H); else { seed(); raf = requestAnimationFrame(frame); } paintFx(); };
+paintFx();
 rs(); if (!RM) raf = requestAnimationFrame(frame);
 go();

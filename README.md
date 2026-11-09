@@ -29,6 +29,23 @@ Schema changes: edit `app/models.py`, run `alembic revision --autogenerate -m "w
 
 Free, no-card deployment (Render + Supabase): see `DEPLOY-FREE.md`.
 
+## Events, quizzes and forms
+**Events** (admin → Events): date, end, location, seats, registration open/deadline, optional registration form. The public Activities page and home page list them automatically
+(upcoming first, past below, with search-engine event data). Students register / cancel / join a waitlist from the portal; when someone cancels, the next waitlisted student is
+promoted automatically. Admins see who registered, tick attendance, remove people and download a CSV.
+**Forms & quizzes** (admin → Forms & quizzes): question types short answer, paragraph, multiple choice, checkboxes, rating, number. Quizzes are auto-graded (points, accepted answers,
+time limit, one attempt, choose whether students see nothing / score / correct answers). Admins get per-question statistics, every response, and a CSV. Correct answers never leave
+the server before a student submits. Exports neutralise spreadsheet formulas.
+
+**Who can join an event** (set per event in the admin): **Public** = shown on the website, anyone can register without an account (name, email, optional phone/school, plus the event's form);
+**Students only** = portal only, approved students; **Invite only** = chosen students. Guests and students share the same seats and waitlist, and admins see both in one list
+(marked Guest / Student). Guest sign-up is limited to 10/hour/IP and has a hidden honeypot field; emails are not verified, so check the list before the event.
+
+## Effects switch (calm mode)
+A pill at the top right of every public page ("Effects on / off") turns all lights, particles, glow and animation off for the whole site; the same pages, navigation and features remain,
+in a still, softer-coloured version. The choice is remembered per visitor (localStorage `nditc_fx`). With no saved choice, effects start **off** for visitors whose device asks for
+reduced motion or data saving, and **on** for everyone else. `static/fx.js` decides this before the page paints (no flash); all calm styles live under `html[data-fx=off]` in `site.css`.
+
 ## Security model
 argon2id · httpOnly SameSite=Strict cookie + required `X-Requested-With` header on writes · session bound to password version (changing a password logs out other devices) ·
 role/active re-checked in DB per request · temp passwords must be changed at first login · 8 wrong passwords = 15 min lock · login 5/min/IP, everything 300/min/IP ·

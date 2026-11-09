@@ -45,4 +45,15 @@ class S3:
         return StreamingResponse(o["Body"].iter_chunks(64 * 1024), media_type=mime, headers=h)
 
 
-store = S3() if os.environ.get("S3_BUCKET") else Disk(os.environ.get("DATA_DIR", "./data"))
+def _make():
+    if os.environ.get("S3_BUCKET"):
+        need = ["S3_ENDPOINT", "S3_REGION", "S3_ACCESS_KEY", "S3_SECRET_KEY"]
+        miss = [k for k in need if not os.environ.get(k)]
+        if miss: raise RuntimeError("File storage is half-configured. Missing environment variables: " + ", ".join(miss))
+        return S3()
+    if os.environ.get("ENV") == "prod" and not os.environ.get("DATA_DIR"):
+        raise RuntimeError("No file storage configured. Set S3_BUCKET, S3_ENDPOINT, S3_REGION, S3_ACCESS_KEY and S3_SECRET_KEY (free hosts lose local files on restart).")
+    return Disk(os.environ.get("DATA_DIR", "./data"))
+
+
+store = _make()

@@ -1,3 +1,4 @@
+# Root-level Dockerfile for hosts like Render: build context = repo root, so no path settings to get wrong.
 FROM python:3.12-slim
 WORKDIR /srv
 COPY backend/requirements.txt .

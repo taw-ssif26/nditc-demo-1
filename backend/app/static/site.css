@@ -135,7 +135,7 @@ footer{margin-top:120px;border-top:1px solid var(--bd);padding-top:22px;color:va
 #tm label{display:flex;gap:8px;padding:10px 12px;border-top:1px solid rgba(57,255,136,.3)}
 #ti{flex:1;background:none;border:0;color:#fff;outline:0;font:inherit;min-width:0;margin:0;padding:0;border-radius:0}
 @media(max-width:760px){.two,.reactor{grid-template-columns:1fr}.bento{grid-template-columns:1fr}.bento>.gc,.bento>.gc:nth-child(5n+1),.bento>.gc:nth-child(5n+2){grid-column:auto;min-height:0}.halo{opacity:.35;right:-30%}.tl2::before{left:14px}.te,.te:nth-child(even){width:calc(100% - 44px);margin-left:44px}.te::after,.te:nth-child(even)::after{left:-38px;right:auto}.sx{margin-top:80px}}
-@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}.rv{opacity:1;transform:none}.gg .pr{stroke-dashoffset:calc(264 * (1 - var(--p)))}}
+@media (prefers-reduced-motion:reduce){html:not([data-fx]) *,html:not([data-fx]) *::before,html:not([data-fx]) *::after{animation:none!important;transition:none!important}html:not([data-fx]) .rv{opacity:1;transform:none}html:not([data-fx]) .gg .pr{stroke-dashoffset:calc(264 * (1 - var(--p)))}}
 
 #core.s span{opacity:0;pointer-events:none}
 
@@ -194,3 +194,39 @@ footer{margin-top:120px;border-top:1px solid var(--bd);padding-top:22px;color:va
 #wr .mi i::before{content:"";position:absolute;inset:-12px;border-radius:50%}
 #wr .mi span{pointer-events:none}
 #wr .mi i::before{inset:-8px}
+
+/* ---------- effects switch ---------- */
+#fx{position:fixed;z-index:40;top:calc(14px + env(safe-area-inset-top,0px));right:14px;display:flex;align-items:center;gap:9px;padding:9px 14px;border-radius:99px;border:1px solid var(--bd);background:rgba(5,3,15,.72);backdrop-filter:blur(6px);color:var(--fg);font:700 .66rem var(--fm);letter-spacing:.1em;text-transform:uppercase;cursor:pointer}
+#fx i{width:12px;height:12px;border-radius:50%;background:var(--ac);box-shadow:0 0 12px var(--ac)}
+#fx[aria-pressed=false] i{background:none;border:2px solid var(--mut);box-shadow:none}
+#fx:hover{border-color:var(--ac)}.mapopen #fx{display:none}
+@media(max-width:760px){#fx{padding:8px 11px;font-size:.6rem}}
+
+/* ---------- calm mode: same site, same features, nothing moves, no glow, softer colour ---------- */
+html[data-fx=off] *,html[data-fx=off] *::before,html[data-fx=off] *::after{animation:none!important;transition:none!important;text-shadow:none!important;box-shadow:none!important;scroll-behavior:auto!important}
+html[data-fx=off] #bg,html[data-fx=off] #gl,html[data-fx=off] #ld,html[data-fx=off] .halo{display:none!important}
+html[data-fx=off] #view{filter:saturate(.72)}
+html[data-fx=off] #view *{filter:none!important}
+html[data-fx=off] .rv{opacity:1;transform:none}
+html[data-fx=off] .grad,html[data-fx=off] .hero h1,html[data-fx=off] h2,html[data-fx=off] .big,html[data-fx=off] .num,html[data-fx=off] .bp{background:none;-webkit-text-fill-color:currentColor;color:var(--fg)}
+html[data-fx=off] .big,html[data-fx=off] .num{color:var(--ac)}
+html[data-fx=off] .gc{background:rgba(255,255,255,.045);border-color:var(--bd)}
+html[data-fx=off] .gc::before{display:none}
+html[data-fx=off] .gc:hover{transform:none;border-color:var(--ac)}
+html[data-fx=off] .bt{background:none;border:1px solid var(--ac)}
+html[data-fx=off] .bt.alt{background:var(--ac);color:#0b0b12}
+html[data-fx=off] .bt:hover{transform:none;background:rgba(255,255,255,.08)}
+html[data-fx=off] .bt.alt:hover{background:var(--ac)}
+html[data-fx=off] .gg .pr{stroke-dashoffset:calc(264 * (1 - var(--p)))}
+html[data-fx=off] .mq{mask:none;-webkit-mask:none}
+html[data-fx=off] .mq div{width:auto;flex-wrap:wrap;gap:6px 26px;padding:14px 22px}
+html[data-fx=off] .mq .d{display:none}
+html[data-fx=off] .dbadge,html[data-fx=off] .nb{background:var(--ac)}
+html[data-fx=off] .av::before{background:var(--ac)}
+html[data-fx=off] #core .sph{background:var(--ac)}
+html[data-fx=off] #core .sph::before,html[data-fx=off] #core .sph::after{display:none}
+html[data-fx=off] #wr{background:#0a0a12}
+html[data-fx=off] #wr .mi i{background:var(--pc)}
+html[data-fx=off] #wr .cr{background:var(--ac)}
+html[data-fx=off] #fx i{box-shadow:none}
+html[data-fx=off] body{background:radial-gradient(80% 50% at 50% 0,color-mix(in srgb,var(--ac) 10%,transparent),transparent 72%),var(--bg)}  /* a quiet, still tint so calm mode isn't flat black */

@@ -146,3 +146,184 @@ def test_self_registration_and_approval():
     b.post("/api/admin/users/review", headers=H, json={"ids": [adm["id"]], "action": "reject"})
     assert login(client(), "z@x.org", "admin-pass-1234").status_code == 200  # review can never touch admins
     assert reg(c, "short@x.org", password="short").status_code == 422
+
+
+# ================= events, registration, forms and quizzes =================
+import datetime as dt
+from app.models import SessionLocal, Submission
+from sqlalchemy import select as _select
+
+
+def iso_in(**kw): return (dt.datetime.now(dt.timezone.utc) + dt.timedelta(**kw)).isoformat()
+def mk_student(b, email):
+    u = b.post("/api/admin/users", json={"name": email.split("@")[0], "email": email}, headers=H).json(); c = client(); ready(c, email, u["password"]); return u, c
+def reg_url(e): return f"/api/student/events/{e['id']}/register"
+def mk_event(b, **kw):
+    body = {"kind": "event", "title": "Hackathon", "date": iso_in(days=3), "location": "Lab 2", "capacity": 1, "reg_open": True, "audience": "students", **kw}
+    return b.post("/api/admin/entries", headers=H, json=body).json()
+
+
+def test_event_registration_capacity_waitlist_attendance():
+    b = boss(); a, ca = mk_student(b, "ev1@x.org"); _, cb = mk_student(b, "ev2@x.org"); _, cc = mk_student(b, "ev3@x.org")
+    e = mk_event(b); assert e["capacity"] == 1 and e["location"] == "Lab 2" and e["reg_open"] is True
+    ev = ca.get("/api/student/events").json()[0]; assert ev["title"] == "Hackathon" and ev["taken"] == 0 and ev["mine"] is None and ev["full"] is False
+    assert ca.post(reg_url(e), headers=H, json={}).json()["status"] == "registered"
+    assert cb.post(reg_url(e), headers=H, json={}).json()["status"] == "waitlist"  # full: second student waits
+    assert ca.post(reg_url(e), headers=H, json={}).json()["status"] == "registered"  # idempotent
+    m = cb.get("/api/student/events").json()[0]["mine"]; assert m["status"] == "waitlist" and m["position"] == 1
+    assert ca.delete(reg_url(e), headers=H).status_code == 200
+    assert cb.get("/api/student/events").json()[0]["mine"]["status"] == "registered"  # waitlist promoted automatically
+    d = b.get(f"/api/admin/events/{e['id']}/registrations").json(); assert d["counts"]["registered"] == 1
+    rid = [i for i in d["items"] if i["email"] == "ev2@x.org"][0]["id"]
+    assert b.put(f"/api/admin/registrations/{rid}", headers=H, json={"attended": True}).status_code == 200
+    assert b.get(f"/api/admin/events/{e['id']}/registrations").json()["counts"]["attended"] == 1
+    csvt = b.get(f"/api/admin/events/{e['id']}/registrations.csv"); assert csvt.status_code == 200 and "Name,Email" in csvt.text
+    assert ca.get(f"/api/admin/events/{e['id']}/registrations").status_code == 403  # students can't see who registered
+    b.put(f"/api/admin/entries/{e['id']}", headers=H, json={"kind": "event", "title": "Hackathon", "date": iso_in(days=3), "capacity": 1, "reg_open": False})
+    r = cc.post(reg_url(e), headers=H, json={}); assert r.status_code == 409 and "closed" in r.json()["detail"].lower()
+    b.put(f"/api/admin/entries/{e['id']}", headers=H, json={"kind": "event", "title": "Hackathon", "date": iso_in(days=3), "reg_open": True, "reg_deadline": iso_in(hours=-1)})
+    assert "deadline" in cc.post(reg_url(e), headers=H, json={}).json()["detail"]
+    b.put(f"/api/admin/entries/{e['id']}", headers=H, json={"kind": "event", "title": "Hackathon", "date": iso_in(days=-5), "reg_open": True})
+    assert "ended" in cc.post(reg_url(e), headers=H, json={}).json()["detail"]  # past events can't be joined
+
+
+def test_event_visibility_rules():
+    b = boss(); a, ca = mk_student(b, "vis1@x.org"); _, cb = mk_student(b, "vis2@x.org")
+    e = mk_event(b, title="Invite only", audience="assigned"); b.put(f"/api/admin/entries/{e['id']}/assign", headers=H, json={"user_ids": [a["id"]]})
+    assert "Invite only" in [x["title"] for x in ca.get("/api/student/events").json()]
+    assert "Invite only" not in [x["title"] for x in cb.get("/api/student/events").json()]
+    assert cb.post(reg_url(e), headers=H, json={}).status_code == 404
+    h = mk_event(b, title="Hidden draft", published=False); assert ca.post(reg_url(h), headers=H, json={}).status_code == 404
+    assert b.post("/api/admin/entries", headers=H, json={"kind": "event", "title": "Bad", "date": iso_in(days=2), "end_date": iso_in(days=1)}).status_code == 422
+
+
+def test_event_with_registration_form_and_csv_safety():
+    b = boss(); _, ca = mk_student(b, "rf1@x.org")
+    f = b.post("/api/admin/forms", headers=H, json={"title": "T-shirt", "kind": "form", "published": True, "questions": [{"type": "short", "text": "Team name", "required": True}, {"type": "single", "text": "Size", "options": ["S", "M", "L"]}]}).json()
+    e = mk_event(b, title="With form", capacity=None, form_id=f["id"]); qs = f["questions"]
+    assert ca.post(reg_url(e), headers=H, json={"answers": {}}).status_code == 422  # required answer missing
+    assert ca.post(reg_url(e), headers=H, json={"answers": {str(qs[0]["id"]): "=HYPERLINK(1)", str(qs[1]["id"]): 9}}).status_code == 422  # bad option
+    assert ca.post(reg_url(e), headers=H, json={"answers": {str(qs[0]["id"]): "=HYPERLINK(1)", str(qs[1]["id"]): 2}}).json()["status"] == "registered"
+    d = b.get(f"/api/admin/events/{e['id']}/registrations").json()["items"][0]; assert d["answers"] == [{"q": "Team name", "a": "=HYPERLINK(1)"}, {"q": "Size", "a": "L"}]
+    assert "'=HYPERLINK(1)" in b.get(f"/api/admin/events/{e['id']}/registrations.csv").text  # formula neutralised in the export
+    mine = next(x for x in ca.get("/api/student/events").json() if x["id"] == e["id"]); assert mine["form"]["questions"][0]["text"] == "Team name" and mine["mine"]["status"] == "registered"
+
+
+QUIZ = {"title": "Python quiz", "kind": "quiz", "published": True, "time_limit": 10, "show_results": "answers", "questions": [
+    {"type": "single", "text": "2+2?", "options": ["3", "4"], "correct": [1], "points": 2, "required": True, "explanation": "Basic maths"},
+    {"type": "multi", "text": "Primes?", "options": ["2", "3", "4"], "correct": [0, 1], "points": 3},
+    {"type": "short", "text": "Capital of France?", "correct": ["Paris"], "points": 1},
+    {"type": "rating", "text": "How was it?"}]}
+
+
+def test_quiz_grading_and_secrecy():
+    b = boss(); _, ca = mk_student(b, "qz1@x.org"); _, cb = mk_student(b, "qz2@x.org")
+    q = b.post("/api/admin/forms", headers=H, json=QUIZ).json(); fid = q["id"]
+    assert any(x["title"] == "Python quiz" and x["state"] == "open" for x in ca.get("/api/student/forms").json())
+    st = ca.post(f"/api/student/forms/{fid}/start", headers=H).json()
+    assert st["deadline"] and all("correct" not in x and "explanation" not in x for x in st["questions"])  # answers never leave the server before submitting
+    ids = [x["id"] for x in st["questions"]]
+    assert ca.post(f"/api/student/forms/{fid}/submit", headers=H, json={"answers": {}}).status_code == 422  # required question
+    r = ca.post(f"/api/student/forms/{fid}/submit", headers=H, json={"answers": {str(ids[0]): 1, str(ids[1]): [1, 0], str(ids[2]): "  paris ", str(ids[3]): 5}}).json()
+    assert r["score"] == 6 and r["max"] == 6 and r["late"] is False
+    assert ca.post(f"/api/student/forms/{fid}/start", headers=H).status_code == 409  # one attempt
+    rv = ca.get(f"/api/student/forms/{fid}/result").json(); assert rv["review"][0]["right"] is True and rv["review"][0]["explanation"] == "Basic maths"
+    st2 = cb.post(f"/api/student/forms/{fid}/start", headers=H).json()
+    assert cb.post(f"/api/student/forms/{fid}/submit", headers=H, json={"answers": {str(st2["questions"][0]["id"]): 0, str(st2["questions"][1]["id"]): [0]}}).json()["score"] == 0  # all-or-nothing multi-choice
+    resp = b.get(f"/api/admin/forms/{fid}/responses").json(); assert resp["count"] == 2 and resp["avg_score"] == 3 and resp["questions"][0]["counts"] == [1, 1]
+    assert resp["questions"][0]["correct_rate"] == 50
+    assert "Python quiz" not in b.get(f"/api/admin/forms/{fid}/responses.csv").text.splitlines()[0] and "qz1" in b.get(f"/api/admin/forms/{fid}/responses.csv").text
+    assert ca.get("/api/admin/forms").status_code == 403 and ca.get(f"/api/admin/forms/{fid}/responses").status_code == 403
+
+
+def test_quiz_rules_window_late_and_visibility():
+    b = boss(); a, ca = mk_student(b, "qr1@x.org"); _, cb = mk_student(b, "qr2@x.org")
+    s1 = b.post("/api/admin/forms", headers=H, json={**QUIZ, "title": "Score only", "show_results": "score", "time_limit": 1}).json()
+    st = ca.post(f"/api/student/forms/{s1['id']}/start", headers=H).json(); ids = [x["id"] for x in st["questions"]]
+    with SessionLocal() as s:  # pretend the student started 10 minutes ago on a 1-minute quiz
+        x = s.scalar(_select(Submission).where(Submission.form_id == s1["id"])); x.started_at = dt.datetime.now(dt.timezone.utc) - dt.timedelta(minutes=10); s.commit()
+    r = ca.post(f"/api/student/forms/{s1['id']}/submit", headers=H, json={"answers": {str(ids[0]): 1}}).json(); assert r["late"] is True and "review" not in ca.get(f"/api/student/forms/{s1['id']}/result").json()
+    soon = b.post("/api/admin/forms", headers=H, json={**QUIZ, "title": "Later", "opens_at": iso_in(days=1)}).json()
+    assert ca.post(f"/api/student/forms/{soon['id']}/start", headers=H).status_code == 403
+    gone = b.post("/api/admin/forms", headers=H, json={**QUIZ, "title": "Over", "opens_at": iso_in(days=-2), "closes_at": iso_in(days=-1)}).json()
+    assert ca.post(f"/api/student/forms/{gone['id']}/start", headers=H).status_code == 403
+    pv = b.post("/api/admin/forms", headers=H, json={**QUIZ, "title": "Private", "audience": "assigned"}).json()
+    assert ca.post(f"/api/student/forms/{pv['id']}/start", headers=H).status_code == 404
+    b.put(f"/api/admin/forms/{pv['id']}/assign", headers=H, json={"user_ids": [a["id"]]})
+    assert ca.post(f"/api/student/forms/{pv['id']}/start", headers=H).status_code == 200 and cb.post(f"/api/student/forms/{pv['id']}/start", headers=H).status_code == 404
+    dr = b.post("/api/admin/forms", headers=H, json={**QUIZ, "title": "Draft", "published": False}).json()
+    assert ca.post(f"/api/student/forms/{dr['id']}/start", headers=H).status_code == 404
+
+
+def test_form_builder_validation_and_editing():
+    b = boss()
+    bad = lambda qs, **kw: b.post("/api/admin/forms", headers=H, json={"title": "X", "kind": "quiz", "questions": qs, **kw}).status_code
+    assert bad([{"type": "single", "text": "q", "options": ["only one"], "correct": [0]}]) == 422
+    assert bad([{"type": "single", "text": "q", "options": ["a", "b"], "correct": [5]}]) == 422
+    assert bad([{"type": "single", "text": "q", "options": ["a", "b"], "correct": [0, 1]}]) == 422
+    assert bad([{"type": "wizard", "text": "q"}]) == 422
+    assert bad([], published=True) == 422  # can't publish an empty form
+    assert bad([{"type": "short", "text": "q"}] * 101) == 422
+    assert bad([{"type": "short", "text": "q"}], opens_at=iso_in(days=2), closes_at=iso_in(days=1)) == 422
+    f = b.post("/api/admin/forms", headers=H, json={"title": "Edit me", "kind": "form", "questions": [{"type": "short", "text": "A"}, {"type": "long", "text": "B"}]}).json()
+    keep = f["questions"][1]; out = b.put(f"/api/admin/forms/{f['id']}", headers=H, json={"title": "Edited", "kind": "form", "questions": [{"id": keep["id"], "type": "long", "text": "B2"}, {"type": "rating", "text": "C"}]}).json()
+    assert [q["text"] for q in out["questions"]] == ["B2", "C"] and out["questions"][0]["id"] == keep["id"]  # existing question keeps its id (and answers)
+    assert b.delete(f"/api/admin/forms/{f['id']}", headers=H).status_code == 200 and b.get(f"/api/admin/forms/{f['id']}").status_code == 404
+
+
+def test_public_site_shows_dynamic_events():
+    b = boss(); c = client()
+    mk_event(b, title="Open Day", audience="public", location="Main Hall", capacity=None)
+    mk_event(b, title="Members Only", audience="students")
+    html = c.get("/activities").text
+    assert "Open Day" in html and "Main Hall" in html and '"@type": "Event"' in html.replace('"@type":"Event"', '"@type": "Event"')
+    assert "Members Only" not in html  # students-only events never appear on the public site
+    assert "Open Day" in [e["title"] for e in c.get("/api/public/event").json()]
+
+
+# ================= public vs student-only events =================
+GUEST = {"name": "Nadia Rahman", "email": "nadia@school.org", "phone": "01700000000", "org": "Holy Cross College, Class 12"}
+def guest_url(e): return f"/api/public/events/{e['id']}/register"
+
+
+def test_public_event_guest_registration_and_privacy():
+    b = boss(); c = client(); _, cs = mk_student(b, "gst1@x.org")
+    pub = mk_event(b, title="Open Programming Contest", audience="public", capacity=2)
+    stu = mk_event(b, title="Members Workshop", audience="students", capacity=None)
+    inv = mk_event(b, title="Core Team Retreat", audience="assigned", capacity=None)
+    info = c.get(f"/api/public/events/{pub['id']}/reg").json()
+    assert info["open"] and info["capacity"] == 2 and info["taken"] == 0 and info["form"] is None  # no login needed to see the sign-up details
+    assert c.get(f"/api/public/events/{stu['id']}/reg").status_code == 404 and c.get(f"/api/public/events/{inv['id']}/reg").status_code == 404
+    assert c.post(guest_url(stu), headers=H, json=GUEST).status_code == 404 and c.post(guest_url(inv), headers=H, json=GUEST).status_code == 404  # student-only stays student-only
+    assert c.post(guest_url(pub), json=GUEST).status_code == 403  # CSRF header still required
+    assert c.post(guest_url(pub), headers=H, json=GUEST).json()["status"] == "registered"
+    assert c.post(guest_url(pub), headers=H, json={**GUEST, "name": "Someone Else"}).json()["status"] == "registered"  # same email again: no duplicate seat
+    assert c.post(guest_url(pub), headers=H, json={**GUEST, "email": "bot@x.org", "website": "http://spam"}).json()["status"] == "registered"  # honeypot: looks fine to the bot, stores nothing
+    assert cs.post(reg_url(pub), headers=H, json={}).json()["status"] == "registered"  # a student takes the 2nd seat: guests and students share capacity
+    assert c.post(guest_url(pub), headers=H, json={**GUEST, "email": "late@school.org"}).json()["status"] == "waitlist"
+    d = b.get(f"/api/admin/events/{pub['id']}/registrations").json()
+    kinds = {i["email"]: i["type"] for i in d["items"]}
+    assert kinds == {"nadia@school.org": "guest", "gst1@x.org": "student", "late@school.org": "guest"} and d["counts"]["registered"] == 2 and d["counts"]["waitlist"] == 1
+    g = [i for i in d["items"] if i["email"] == "nadia@school.org"][0]; assert g["phone"] == "01700000000" and g["info"].startswith("Holy Cross")
+    assert "Phone" in b.get(f"/api/admin/events/{pub['id']}/registrations.csv").text.splitlines()[0]
+    assert b.put(f"/api/admin/registrations/{g['id']}", headers=H, json={"status": "cancelled"}).status_code == 200  # removing a guest frees the seat for the waitlist
+    assert [i["status"] for i in b.get(f"/api/admin/events/{pub['id']}/registrations").json()["items"] if i["email"] == "late@school.org"] == ["registered"]
+    assert next(x for x in cs.get("/api/student/events").json() if x["id"] == pub["id"])["taken"] == 2 and next(x for x in cs.get("/api/student/events").json() if x["id"] == pub["id"])["audience"] == "public"
+    assert "Open Programming Contest" in [x["title"] for x in cs.get("/api/student/events").json()] and "Members Workshop" in [x["title"] for x in cs.get("/api/student/events").json()]
+    assert "Members Workshop" not in c.get("/activities").text and "Open Programming Contest" in c.get("/activities").text
+
+
+def test_guest_registration_rules():
+    b = boss(); c = client()
+    f = b.post("/api/admin/forms", headers=H, json={"title": "Contest details", "kind": "form", "published": True, "questions": [{"type": "short", "text": "Team name", "required": True}]}).json()
+    e = mk_event(b, title="Contest with form", audience="public", capacity=None, form_id=f["id"])
+    assert c.get(f"/api/public/events/{e['id']}/reg").json()["form"]["questions"][0]["text"] == "Team name"
+    assert c.post(guest_url(e), headers=H, json=GUEST).status_code == 422  # required answer missing
+    assert c.post(guest_url(e), headers=H, json={**GUEST, "answers": {str(f["questions"][0]["id"]): "Byte Me"}}).json()["status"] == "registered"
+    assert b.get(f"/api/admin/events/{e['id']}/registrations").json()["items"][0]["answers"] == [{"q": "Team name", "a": "Byte Me"}]
+    assert c.post(guest_url(e), headers=H, json={**GUEST, "email": "not-an-email"}).status_code == 422
+    assert c.post(guest_url(e), headers=H, json={**GUEST, "email": "b@x.org", "name": "x"}).status_code == 422
+    closed = mk_event(b, title="Closed contest", audience="public", reg_open=False); r = c.post(guest_url(closed), headers=H, json=GUEST)
+    assert r.status_code == 409 and "closed" in r.json()["detail"].lower()
+    gone = mk_event(b, title="Old contest", audience="public", date=iso_in(days=-4)); assert "ended" in c.post(guest_url(gone), headers=H, json=GUEST).json()["detail"]
+    draft = mk_event(b, title="Draft contest", audience="public", published=False); assert c.post(guest_url(draft), headers=H, json=GUEST).status_code == 404
